@@ -1,0 +1,101 @@
+// Enhance overlay UI for current, history, and muted sounds
+overlay.innerHTML = `
+    <h4 style="margin: 0 0 10px;">Sound Overlay</h4>
+    <div id="current-sounds">
+        <strong>Currently Playing:</strong>
+        <ul id="playingList" style="list-style: none; padding: 0; margin: 5px 0;"></ul>
+    </div>
+    <div id="history-sounds" style="margin-top: 10px;">
+        <strong>Play History:</strong>
+        <ul id="historyList" style="list-style: none; padding: 0; margin: 5px 0;"></ul>
+    </div>
+    <div id="volume-sounds" style="margin-top: 10px;">
+        <strong>Muted Sounds Awaiting Volume:</strong>
+        <ul id="mutedList" style="list-style: none; padding: 0; margin: 5px 0;"></ul>
+    </div>
+`;
+
+// Helper data structures
+const mutedSounds = new Set();
+const soundNodes = new Map();
+
+// Overriding volume method for real-time volume detection
+function overrideVolumeMethod(soundInstance) {
+    const originalVolume = soundInstance.volume;
+
+    soundInstance.volume = function (...args) {
+        if (args.length > 0) {
+            const newVolume = args[0];
+            const sound = soundInstance._src;
+
+            if (newVolume > 0 && mutedSounds.has(sound)) {
+                mutedSounds.delete(sound);
+                playingSounds.add(sound);
+            } else if (newVolume === 0) {
+                playingSounds.delete(sound);
+                mutedSounds.add(sound);
+            }
+
+            updateOverlay();
+        }
+        return originalVolume.apply(this, args);
+    };
+}
+
+// Update overlay display
+function updateOverlay() {
+    const playingList = document.getElementById("playingList");
+    const historyList = document.getElementById("historyList");
+    const mutedList = document.getElementById("mutedList");
+
+    playingList.innerHTML = "";
+    playingSounds.forEach(sound => {
+        const li = document.createElement("li");
+        li.textContent = `Sound: ${sound}`;
+        playingList.appendChild(li);
+    });
+
+    historyList.innerHTML = "";
+    playHistory.slice(-5).forEach(sound => {
+        const li = document.createElement("li");
+        li.textContent = `Sound: ${sound}`;
+        historyList.appendChild(li);
+    });
+
+    mutedList.innerHTML = "";
+    mutedSounds.forEach(sound => {
+        const li = document.createElement("li");
+        li.textContent = `Sound: ${sound}`;
+        mutedList.appendChild(li);
+    });
+}
+
+// Listen for play events and override volume
+Howler.on("play", function (id) {
+    const sound = this._src;
+    const volume = this.volume();
+    soundNodes.set(sound, this);  // Track sound instance
+    playHistory.push(sound);
+
+    // Override volume method for this sound instance
+    overrideVolumeMethod(this);
+
+    if (volume > 0) {
+        playingSounds.add(sound);
+    } else {
+        mutedSounds.add(sound);
+    }
+
+    updateOverlay();
+});
+
+// Listen for end events
+Howler.on("end", function (id) {
+    const sound = this._src;
+    playingSounds.delete(sound);
+    mutedSounds.delete(sound);
+    soundNodes.delete(sound);
+    updateOverlay();
+});
+
+console.log("Sound overlay UI with volume monitoring via method override is now active!");
