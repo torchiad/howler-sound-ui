@@ -1,0 +1,106 @@
+// Create an HTML container for the sound list
+const soundListContainer = document.createElement('div');
+soundListContainer.style.position = 'fixed';
+soundListContainer.style.top = '10px';
+soundListContainer.style.right = '10px';
+soundListContainer.style.background = 'rgba(0, 0, 0, 0.8)';
+soundListContainer.style.color = 'white';
+soundListContainer.style.padding = '10px';
+soundListContainer.style.borderRadius = '5px';
+soundListContainer.style.maxHeight = '50vh';
+soundListContainer.style.overflowY = 'auto';
+soundListContainer.style.fontFamily = 'Arial, sans-serif';
+document.body.appendChild(soundListContainer);
+
+// Set to track currently playing sounds and their properties
+const playingSounds = new Map();
+
+// Function to update the display with currently playing sounds and their settings
+function updateSoundList() {
+    soundListContainer.innerHTML = '<h3>Playing Sounds</h3>';
+    if (playingSounds.size === 0) {
+        soundListContainer.innerHTML += '<p>No sounds playing.</p>';
+    } else {
+        playingSounds.forEach((soundInfo, id) => {
+            const soundDiv = document.createElement('div');
+            soundDiv.textContent = `Sound ID: ${id}, Volume: ${soundInfo.volume}, Mute: ${soundInfo.mute}, Fade: ${soundInfo.fade}`;
+            soundListContainer.appendChild(soundDiv);
+        });
+    }
+}
+
+// Extend Howl to add custom tracking for play, volume, fade, etc.
+const originalHowl = window.Howl;
+window.Howl = function (...args) {
+    const soundInstance = new originalHowl(...args);
+
+    // Wrap methods to track changes made by SoundPlayer
+    const trackChanges = (method, callback) => {
+        const originalMethod = soundInstance[method].bind(soundInstance);
+        soundInstance[method] = (...args) => {
+            callback(...args);
+            return originalMethod(...args);
+        };
+    };
+
+    // Track play, pause, and stop events
+    soundInstance.on('play', (id) => {
+        playingSounds.set(id, { 
+            soundInstance, 
+            volume: soundInstance.volume(id), 
+            mute: soundInstance._muted, 
+            fade: 'N/A' 
+        });
+        updateSoundList();
+    });
+
+    soundInstance.on('pause', (id) => {
+        playingSounds.delete(id);
+        updateSoundList();
+    });
+
+    soundInstance.on('stop', (id) => {
+        playingSounds.delete(id);
+        updateSoundList();
+    });
+
+    soundInstance.on('end', (id) => {
+        playingSounds.delete(id);
+        updateSoundList();
+    });
+
+    // Wrap volume method
+    trackChanges('volume', (volume, id) => {
+        if (playingSounds.has(id)) {
+            const soundInfo = playingSounds.get(id);
+            soundInfo.volume = volume;
+            playingSounds.set(id, soundInfo);
+            updateSoundList();
+        }
+    });
+
+    // Wrap mute method
+    trackChanges('mute', (mute, id) => {
+        if (playingSounds.has(id)) {
+            const soundInfo = playingSounds.get(id);
+            soundInfo.mute = mute;
+            playingSounds.set(id, soundInfo);
+            updateSoundList();
+        }
+    });
+
+    // Wrap fade method
+    trackChanges('fade', (from, to, duration, id) => {
+        if (playingSounds.has(id)) {
+            const soundInfo = playingSounds.get(id);
+            soundInfo.fade = `From ${from} to ${to} over ${duration}ms`;
+            playingSounds.set(id, soundInfo);
+            updateSoundList();
+        }
+    });
+
+    return soundInstance;
+};
+
+// Initial list update
+updateSoundList();
